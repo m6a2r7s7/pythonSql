@@ -1,10 +1,13 @@
 import psycopg2
 
-conn = psycopg2.connect(database="my_db", user="postgres", password="")
+# conn = psycopg2.connect(database="my_db", user="postgres", password="")
+# cursor = conn.cursor()
 
-with conn.cursor() as cur:
+with psycopg2.connect(database="my_db", user="postgres", password="") as conn:
 
-    def create_tables(cursor):
+# with conn.cursor() as cur:
+    cursor = conn.cursor()
+    def create_tables():
         cursor.execute("""
                     DROP TABLE phone_numbers;
                     DROP TABLE clients
@@ -23,56 +26,80 @@ with conn.cursor() as cur:
             CREATE TABLE phone_numbers(
             id SERIAL PRIMARY KEY,
             client_id INTEGER NOT NULL REFERENCES clients(id),
-            number INTEGER
+            number BIGINT UNIQUE
             );
         """)
+        # conn.commit()
+        print("Created tables!")
 
-        conn.commit()
-        print("Created!")
-
-    def add_new_client(cursor, first_name: str, last_name: str, email: str, phones=None):
+    def add_new_client(id : int, first_name: str, last_name: str, email: str, phone_num=None):
+        res = "~ "
         cursor.execute("""
-            INSERT INTO clients(first_name, last_name, email) VALUES (%s, %s, %s);
-            INSERT INTO phone_numbers(client_id, number) VALUES (1, %s) RETURNING client_id;
-        """, (first_name, last_name, email, phones))
-        print(cursor.fetchone())
-        conn.commit()
+            INSERT INTO clients( first_name, last_name, email) VALUES (%s, %s, %s);
+        """, (first_name, last_name, email))
+        res += f"created client with id = {id}"
+        if phone_num != None:
+            cursor.execute("""
+                INSERT INTO phone_numbers(client_id, number) VALUES (%s, %s);
+            """,  (id, phone_num))
+            res += f" and phone number {phone_num}"
+        print(res)
+        # conn.commit()
 
-    def add_phone_number(cursor, id: int, number: int):
+    def add_phone_number(id: int, number):
         cursor.execute("""
-            INSERT INTO phone_numbers(client_id, number) VALUES(%s, %s) RETURNING client_id, number;
+            INSERT INTO phone_numbers(client_id, number) VALUES(%s, %s);
         """, (id, number))
-        print(cursor.fetchone())
-        conn.commit()
+        print(f"~ added a new phone number {number} to client {id}")
+        # conn.commit()
 
-    def change_data(cursor, id: int, first_name=None, last_name=None, email=None, phone=None):
-        cursor.execute("""
-                UPDATE clients SET first_name=%s, last_name=%s, email=%s, phone=%s WHERE id=%s RETURNING id, name;
-            """, (first_name, last_name, email, phone, id))
-        print(cursor.fetchone())
-        conn.commit()
+    def change_data(id: int, first_name=None, last_name=None, email=None, phone=None):
+        res = "~ "
+        if first_name != None:
+            cursor.execute("""
+                UPDATE clients SET first_name=%s WHERE id=%s;
+            """, (first_name, id))
+            res += f"first name changed to {first_name}. "
+        if last_name != None:
+            cursor.execute("""
+                UPDATE clients SET last_name=%s WHERE id=%s;
+            """, (last_name, id))
+            res += f"last name changed to {last_name}. "
+        if email != None:
+            cursor.execute("""
+                UPDATE clients SET email=%s WHERE id=%s;
+            """, (email, id))
+            res += f"email changed to {email}. "
+        if phone != None:
+            cursor.execute("""
+                UPDATE phone_numbers SET phone=%s WHERE client_id=%s;
+            """, (phone, id))
+            res += f"phone number changed to {phone}. "
+        print(res)
+        # conn.commit()
 
-    def delete_client(cursor, id: int):
+    def delete_client(id: int):
         cursor.execute("""
+                DELETE FROM phone_numbers WHERE client_id=%s;
                 DELETE FROM clients WHERE id=%s;
-            """, (id,))
-        conn.commit()
+            """, (id, id))
+        print(f"~ client {id} successfully deleted")
+        # conn.commit()
 
-    def search_client(cursor, first_name=None, last_name=None, email=None, phone=None):
+    def search_client(first_name=None, last_name=None, email=None, phone=None):
         cursor.execute("""
-            SELECT * FROM clients
+            SELECT clients.id FROM clients
             INNER JOIN phone_numbers on phone_numbers.client_id = clients.id
-            WHERE %s OR %s OR %s OR %s IN (clients);
+            WHERE (first_name =%s) OR (last_name =%s) OR (email =%s) OR (number =%s);
         """, (first_name, last_name, email, phone))
-        conn.commit()
+        print(f"~ client {cursor.fetchone()}")
+        # conn.commit()
 
+create_tables()
+add_new_client(id=1, first_name='Питер', last_name='Паркер', email='parker@pauk.com', phone_num=80000000000)
+add_phone_number(id=1, number=80006660066)
+change_data(first_name='Peter', last_name='Parker', id=1, email="myemail@pauk.com")
+search_client(first_name='Peter')
+delete_client(1)
 
-    create_tables(cursor=cur)
-    add_new_client(cur, first_name='Саша', last_name='Шакиров', email='qwerty@gmail.com')
-    add_phone_number(cur, 1, 80006660066)
-    search_client(cur, 'Александр')
-    change_data(cur, first_name='Александр', last_name='Шакиров', id=1)
-    delete_client(cur, 1)
-    search_client(cur, first_name='Александр')
-
-conn.close()
+# conn.close()
